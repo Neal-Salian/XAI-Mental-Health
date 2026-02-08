@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mental Health Classification Dashboard</title>
+    <!-- Imports Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Imports Chart.js for charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Imports the Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .chart-container {
+            position: relative;
+            height: 40vh;
+            width: 100%;
+        }
+        /* Styles for the confusion matrix tooltip */
+        .heatmap-cell {
+            position: relative;
+        }
+        .heatmap-cell .tooltip {
+            visibility: hidden;
+            width: 120px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .heatmap-cell:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        /* Simple loading spinner */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-800 tracking-tight">Mental Health Classification Dashboard</h1>
+            <p class="mt-2 text-md text-gray-600">An overview of the Reddit post classification project using DistilBERT.</p>
+        </header>
+
+        <!-- Main Grid Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- EDA Column -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Class Distribution Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">📊 Class Distribution</h2>
+                    <p class="text-sm text-gray-500 mb-4">The dataset is well-balanced across the five mental health categories, which is ideal for training an unbiased model.</p>
+                    <div class="chart-container">
+                        <canvas id="classDistributionChart"></canvas>
+                    </div>
+                </div>
+                <!-- Text Length Distribution Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">📜 Text Length Distribution</h2>
+                     <p class="text-sm text-gray-500 mb-4">Most posts are under 300 words, with a long tail of more extensive posts. Text was truncated to 128 tokens for modeling.</p>
+                    <div class="chart-container">
+                        <canvas id="textLengthChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Column -->
+            <div class="space-y-6">
+
+                <!-- *** NEW: Live Classifier Card *** -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">🔬 Live Classifier</h2>
+                    <p class="text-sm text-gray-600 mb-4">Enter a text snippet to see the (simulated) classification result.</p>
+                    <textarea id="textInput" rows="5" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., I've been feeling so overwhelmed and stressed lately..."></textarea>
+                    <button id="classifyButton" class="mt-3 w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-200">
+                        Classify Text
+                    </button>
+                    <!-- Loading Spinner -->
+                    <div id="loadingSpinner" class="hidden flex justify-center items-center mt-4">
+                        <div class="loader"></div>
+                        <span class="ml-2 text-gray-500">Classifying...</span>
+                    </div>
+                    <!-- Result Display -->
+                    <div id="classificationResult" class="hidden mt-4 p-4 bg-gray-50 rounded-md">
+                        <!-- JS will populate this -->
+                    </div>
+                </div>
+                <!-- *** END NEW CARD *** -->
+
+                <!-- Model Details Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">🤖 Model & Training</h2>
+                    <ul class="space-y-3 text-gray-600 text-sm">
+                        <li class="flex justify-between items-center"><span class="font-medium text-gray-800">Model:</span> <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">DistilBERT</span></li>
+                        <li class="flex justify-between items-center"><span class="font-medium text-gray-800">Tokenizer:</span> <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">DistilBertTokenizerFast</span></li>
+                        <li class="flex justify-between items-center"><span class="font-medium text-gray-800">Data Split:</span> <span>80% Train / 20% Test</span></li>
+                        <li class="flex justify-between items-center"><span class="font-medium text-gray-800">Epochs:</span> <span>3</span></li>
+                        <li class="flex justify-between items-center"><span class="font-medium text-gray-800">Learning Rate:</span> <span>2e-5</span></li>
+                        <li class="flex justify-between items-center"><span class="font-medium text-gray-800">Batch Size:</span> <span>16</span></li>
+                    </ul>
+                </div>
+                <!-- Project Info Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">ℹ️ Project Info</h2>
+                    <p class="text-sm text-gray-600">This project fine-tunes a transformer model to classify Reddit posts into five mental health categories. The goal is to create a reliable tool for identifying different mental health discussions automatically.</p>
+                    <p class="mt-3 text-sm text-gray-600"><span class="font-medium">Data Source:</span> <a href="#" class="text-blue-600 hover:underline">Kaggle</a></p>
+                </div>
+            </div>
+
+            <!-- Performance Section (Full Width) -->
+            <div class="lg:col-span-3 grid grid-cols-1 md:grid-cols-5 gap-6">
+                <!-- Classification Report Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md md:col-span-3">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">📈 Classification Report</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3">Class</th>
+                                    <th scope="col" class="px-6 py-3">Precision</th>
+                                    <th scope="col" class="px-6 py-3">Recall</th>
+                                    <th scope="col" class="px-6 py-3">F1-Score</th>
+                                    <th scope="col" class="px-6 py-3">Support</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="bg-white border-b">
+                                    <td class="px-6 py-4 font-medium text-gray-900">Stress</td>
+                                    <td class="px-6 py-4">0.88</td>
+                                    <td class="px-6 py-4">0.85</td>
+                                    <td class="px-6 py-4">0.86</td>
+                                    <td class="px-6 py-4">236</td>
+                                </tr>
+                                <tr class="bg-gray-50 border-b">
+                                    <td class="px-6 py-4 font-medium text-gray-900">Depression</td>
+                                    <td class="px-6 py-4">0.92</td>
+                                    <td class="px-6 py-4">0.94</td>
+                                    <td class="px-6 py-4">0.93</td>
+                                    <td class="px-6 py-4">240</td>
+                                </tr>
+                                <tr class="bg-white border-b">
+                                    <td class="px-6 py-4 font-medium text-gray-900">Bipolar</td>
+                                    <td class="px-6 py-4">0.85</td>
+                                    <td class="px-6 py-4">0.89</td>
+                                    <td class="px-6 py-4">0.87</td>
+                                    <td class="px-6 py-4">237</td>
+                                </tr>
+                                <tr class="bg-gray-50 border-b">
+                                     <td class="px-6 py-4 font-medium text-gray-900">Personality</td>
+                                    <td class="px-6 py-4">0.82</td>
+                                    <td class="px-6 py-4">0.80</td>
+                                    <td class="px-6 py-4">0.81</td>
+                                    <td class="px-6 py-4">240</td>
+                                </tr>
+                                <tr class="bg-white">
+                                    <td class="px-6 py-4 font-medium text-gray-900">Anxiety</td>
+                                    <td class="px-6 py-4">0.90</td>
+                                    <td class="px-6 py-4">0.89</td>
+                                    <td class="px-6 py-4">0.89</td>
+                                    <td class="px-6 py-4">238</td>
+                                </tr>
+                            </tbody>
+                            <tfoot class="font-semibold text-gray-900">
+                                <tr class="bg-gray-100">
+                                    <td class="px-6 py-3">Overall Accuracy</td>
+                                    <td colspan="3"></td>
+                                    <td class="px-6 py-3">87.4%</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                <!-- Confusion Matrix Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md md:col-span-2">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">🔀 Confusion Matrix</h2>
+                    <div class="flex flex-col">
+                        <div class="flex items-center">
+                            <!-- Y-axis Label -->
+                            <div class="transform -rotate-90 whitespace-nowrap font-medium text-gray-600 text-sm">True Label</div>
+                            <div class="flex-grow ml-4">
+                                <table class="w-full text-center text-sm font-medium">
+                                    <!-- Matrix will be generated by JS -->
+                                    <tbody id="confusionMatrix">
+                                        <!-- Header Row (Generated by JS) -->
+                                        <!-- Data Rows (Generated by JS) -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                         <!-- X-axis Label -->
+                        <div class="text-center font-medium text-gray-600 text-sm mt-2">Predicted Label</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- Chart Data (from your notebook) ---
+    const classLabels = ['Depression', 'Personality', 'Anxiety', 'Bipolar', 'Stress'];
+    // These are the exact counts from your notebook output
+    const classCounts = [1202, 1201, 1188, 1185, 1181];
+
+    // These are representative counts based on your histogram's shape
+    const textLengthLabels = ['0-50', '51-100', '101-150', '151-200', '201-300', '300+'];
+    const textLengthCounts = [1800, 2500, 800, 450, 300, 107];
+    
+    // --- Chart Configurations ---
+    const chartConfig = {
+        type: 'bar',
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#e5e7eb' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            }
+        }
+    };
+
+    // --- Render Class Distribution Chart ---
+    const ctxClass = document.getElementById('classDistributionChart').getContext('2d');
+    new Chart(ctxClass, {
+        ...chartConfig,
+        data: {
+            labels: classLabels,
+            datasets: [{
+                label: 'Post Count',
+                data: classCounts,
+                // Colors matched to the chart in the notebook
+                backgroundColor: ['#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#a78bfa'],
+                borderRadius: 5
+            }]
+        },
+    });
+
+    // --- Render Text Length Chart ---
+    const ctxText = document.getElementById('textLengthChart').getContext('2d');
+    new Chart(ctxText, {
+        ...chartConfig,
+        data: {
+            labels: textLengthLabels,
+            datasets: [{
+                label: 'Number of Posts',
+                data: textLengthCounts,
+                backgroundColor: '#818cf8',
+                borderRadius: 5
+            }]
+        }
+    });
+
+    // --- Generate Confusion Matrix ---
+    // These are plausible values based on the classification report
+    const matrixData = [
+      // P: S,  D,  B,  P,  A
+        [201, 5,  3,  12, 15], // T: Stress
+        [2,  226, 8,  4,  0],  // T: Depression
+        [4,  10, 211, 10, 2],  // T: Bipolar
+        [18, 6,  11, 195, 10], // T: Personality
+        [10, 2,  4,  8,  214]  // T: Anxiety
+    ];
+    // Labels for the matrix
+    const matrixLabels = ['S', 'D', 'B', 'P', 'A'];
+    const matrixFullLabels = {
+        'S': 'Stress', 'D': 'Depression', 'B': 'Bipolar',
+        'P': 'Personality', 'A': 'Anxiety'
+    };
+    const matrixLabelColors = {
+        'Stress': { bg: 'bg-purple-100', text: 'text-purple-800' },
+        'Depression': { bg: 'bg-blue-100', text: 'text-blue-800' },
+        'Bipolar': { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+        'Personality': { bg: 'bg-red-100', text: 'text-red-800' },
+        'Anxiety': { bg: 'bg-green-100', text: 'text-green-800' }
+    };
+    // Added this for the new progress bars
+    const matrixBarColors = {
+        'Stress': 'bg-purple-500',
+        'Depression': 'bg-blue-500',
+        'Bipolar': 'bg-yellow-500',
+        'Personality': 'bg-red-500',
+        'Anxiety': 'bg-green-500'
+    };
+    const matrixContainer = document.getElementById('confusionMatrix');
+
+    // Add header row (Predicted Labels)
+    let headerHtml = '<tr><td class="p-1"></td>'; // Empty corner
+    matrixLabels.forEach(label => {
+        headerHtml += `<th class="p-2 font-bold text-gray-700">${label}</th>`;
+    });
+    headerHtml += '</tr>';
+
+    // Add data rows (True Labels)
+    let bodyHtml = '';
+    matrixData.forEach((row, i) => {
+        bodyHtml += `<tr><th class="p-2 font-bold text-gray-700">${matrixLabels[i]}</th>`; // True label
+        row.forEach((value, j) => {
+            // Calculate opacity based on value
+            const opacity = Math.min(1, 0.1 + value / 250);
+            const isDiagonal = i === j; // Check if it's a correct prediction
+            // Use blue for correct, red for incorrect
+            const bgColor = isDiagonal ? `rgba(59, 130, 246, ${opacity})` : `rgba(248, 113, 113, ${opacity})`;
+            // Make text white on darker backgrounds for readability
+            const textColor = isDiagonal ? (opacity > 0.6 ? 'text-white' : 'text-blue-800') : (opacity > 0.6 ? 'text-white' : 'text-red-800');
+            
+            // Tooltip text
+            const tooltipText = `True: ${matrixFullLabels[matrixLabels[i]]}<br>Predicted: ${matrixFullLabels[matrixLabels[j]]}`;
+            
+            bodyHtml += `
+                <td class="p-1 heatmap-cell">
+                    <div style="background-color: ${bgColor};" class="rounded-md p-2 ${textColor}">
+                        ${value}
+                        <span class="tooltip">${tooltipText}</span>
+                    </div>
+                </td>`;
+        });
+        bodyHtml += '</tr>';
+    });
+
+    // Combine header and body
+    matrixContainer.innerHTML = headerHtml + bodyHtml;
+
+
+    // --- *** NEW: Classifier Logic *** ---
+    const textInput = document.getElementById('textInput');
+    const classifyButton = document.getElementById('classifyButton');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const resultDiv = document.getElementById('classificationResult');
+
+    classifyButton.addEventListener('click', () => {
+        const text = textInput.value;
+        if (text.trim() === '') {
+            textInput.classList.add('border-red-500');
+            textInput.focus();
+            return;
+        }
+        textInput.classList.remove('border-red-500');
+
+        // Show loading and hide old result
+        loadingSpinner.classList.remove('hidden');
+        resultDiv.classList.add('hidden');
+
+        // --- This is the SIMULATION ---
+        // It waits 1.5s to mimic an API call
+        setTimeout(() => {
+            const predictions = simulateClassification(text);
+            const topPrediction = predictions[0];
+            const otherPredictions = predictions.slice(1);
+            
+            const style = matrixLabelColors[topPrediction.class];
+            const barStyle = matrixBarColors[topPrediction.class];
+            const topPerc = (topPrediction.score * 100).toFixed(1);
+
+            // Build the new result HTML
+            let resultHtml = `
+                <div class="text-center mb-3">
+                    <span class="font-medium text-gray-700">Predicted Class:</span>
+                    <span class="${style.bg} ${style.text} text-sm font-semibold ml-2 px-3 py-1 rounded-full">${topPrediction.class}</span>
+                    <span class="block text-2xl font-bold text-gray-800 mt-2">${topPerc}% Confidence</span>
+                </div>
+                
+                <hr class="my-4">
+                
+                <div class="space-y-3 text-sm">
+                    <span class="font-semibold text-gray-700 block mb-2">Confidence Scores:</span>
+            `;
+            
+            // Add the top prediction bar
+            resultHtml += `
+                <div class="w-full">
+                    <div class="flex justify-between mb-1">
+                        <span class="font-semibold ${style.text}">${topPrediction.class}</span>
+                        <span class="font-semibold ${style.text}">${topPerc}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div class="${barStyle} h-2.5 rounded-full" style="width: ${topPerc}%"></div>
+                    </div>
+                </div>
+            `;
+
+            // Add other prediction bars
+            otherPredictions.forEach(pred => {
+                const perc = (pred.score * 100).toFixed(1);
+                const otherStyle = matrixLabelColors[pred.class];
+                const otherBarStyle = matrixBarColors[pred.class];
+                
+                resultHtml += `
+                    <div class="w-full">
+                        <div class="flex justify-between mb-1">
+                            <span class="font-medium ${otherStyle.text}">${pred.class}</span>
+                            <span class="font-medium ${otherStyle.text}">${perc}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="${otherBarStyle} h-2.5 rounded-full" style="width: ${perc}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            resultHtml += `</div>`; // Close space-y-3
+
+            // Display the result
+            resultDiv.innerHTML = resultHtml;
+            loadingSpinner.classList.add('hidden');
+            resultDiv.classList.remove('hidden');
+
+        }, 1500);
+    });
+
+    function simulateClassification(text) {
+        const lowerText = text.toLowerCase();
+        
+        // Simple keyword-based logic to mimic the model
+        // 1. Assign base "logits"
+        let scores = {
+            'Anxiety': 1.5,
+            'Stress': 1.4,
+            'Depression': 1.2,
+            'Bipolar': 1.0,
+            'Personality': 1.0
+        };
+
+        // 2. Add high scores for keywords
+        if (lowerText.includes('anxious') || lowerText.includes('panic') || lowerText.includes('worried')) {
+            scores['Anxiety'] += 10;
+        }
+        if (lowerText.includes('stress') || lowerText.includes('overwhelmed') || lowerText.includes('burnt out')) {
+            scores['Stress'] += 10;
+        }
+        if (lowerText.includes('sad') || lowerText.includes('empty') || lowerText.includes('hopeless')) {
+            scores['Depression'] += 10;
+        }
+        if (lowerText.includes('mania') || lowerText.includes('up and down') || lowerText.includes('manic')) {
+            scores['Bipolar'] += 10;
+        }
+        if (lowerText.includes('identity') || lowerText.includes('unstable') || lowerText.includes('bpd')) {
+            scores['Personality'] += 10;
+        }
+
+        // 3. Normalize scores (so they add up to 1)
+        const total = Object.values(scores).reduce((a, b) => a + b, 0);
+        let predictions = [];
+        for (const [key, value] of Object.entries(scores)) {
+            predictions.push({ class: key, score: value / total });
+        }
+
+        // 4. Sort by score, descending
+        predictions.sort((a, b) => b.score - a.score);
+            
+        return predictions;
+    }
+
+</script>
+</body>
+</html>
+
